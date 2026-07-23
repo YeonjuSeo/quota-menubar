@@ -52,10 +52,11 @@ struct PopoverView: View {
     }
 
     /// Real connection status (replaces the old fabricated Off-peak label —
-    /// the usage endpoint provides no peak-window data).
+    /// the usage endpoint provides no peak-window data). Freshness is shown
+    /// separately in the footer, so this only conveys the connection state.
     private var statusBadge: (color: Color, text: String) {
         switch model.loadState {
-        case .loaded:      return (Palette.onlineDot, "실시간")
+        case .loaded:      return (Palette.onlineDot, "연결됨")
         case .loading:     return (Palette.textTertiary, "동기화 중")
         case .signedOut:   return (Palette.textTertiary, "샘플")
         case .rateLimited: return (Palette.amber, "제한됨")
