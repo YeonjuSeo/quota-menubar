@@ -21,7 +21,8 @@ struct SettingsView: View {
                 HStack(spacing: 18) {
                     ForEach([20, 60, 95], id: \.self) { p in
                         VStack(spacing: 6) {
-                            UsageIconCanvas(concept: prefs.iconConcept, percent: p,
+                            UsageIconCanvas(concept: prefs.iconConcept, usedPercent: p,
+                                            showRemaining: prefs.showRemaining,
                                             scheme: .light, colorCoding: prefs.colorCoding)
                             .frame(width: 34, height: 32)
                             Text("\(p)%").font(.caption2).foregroundStyle(.secondary)
@@ -33,6 +34,7 @@ struct SettingsView: View {
                 Toggle("사용량 3단계 색상", isOn: $prefs.colorCoding)
                     .disabled(!prefs.iconConcept.supportsColorCoding)
                 Toggle("퍼센트 텍스트 표시", isOn: $prefs.showPercent)
+                Toggle("남은 양으로 표시 (기본: 사용한 양)", isOn: $prefs.showRemaining)
                 Toggle("90% 이상일 때 아이콘 맥동", isOn: $prefs.pulseWhenCritical)
                 Picker("아이콘 기준 지표", selection: Binding(
                     get: { prefs.menuBarMetric },

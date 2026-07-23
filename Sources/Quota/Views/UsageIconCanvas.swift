@@ -17,15 +17,22 @@ struct UsageIconCanvas: View {
     var hamsterSilhouette: Color = Palette.hamsterLight
     var hamsterFace: Color = Palette.hamsterFaceLight
 
-    /// Resolves every color from the appearance + settings, so callers (menu
-    /// bar, settings preview, snapshots) don't each duplicate the logic.
+    /// Resolves fraction + every color from the appearance + settings, so
+    /// callers (menu bar, settings preview, snapshots) don't duplicate it.
+    /// `usedPercent` is always the consumed amount; `showRemaining` flips what
+    /// the gauge fills toward. Color always tracks risk (usedPercent).
     /// `scheme` = the background the icon sits on (dark menu bar / light card).
-    init(concept: IconConcept, percent: Int, scheme: ColorScheme, colorCoding: Bool) {
+    init(concept: IconConcept, usedPercent: Int, showRemaining: Bool,
+         scheme: ColorScheme, colorCoding: Bool) {
+        let displayPercent = showRemaining ? 100 - usedPercent : usedPercent
+        // Hamster cheeks always shrink with *consumption* (cheeks = food left),
+        // so they read correctly in both modes; gauges fill toward the display.
+        let fillPercent = concept == .hamster ? usedPercent : displayPercent
         let coded = colorCoding && concept.supportsColorCoding
         self.concept = concept
-        self.fraction = Double(percent) / 100
+        self.fraction = Double(fillPercent) / 100
         self.color = coded
-            ? Palette.statusColor(for: percent, colorCoding: true)
+            ? Palette.statusColor(for: usedPercent, colorCoding: true)
             : (scheme == .dark ? Palette.hamsterDark : Palette.mono)
         self.trackColor = scheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.16)
         self.hamsterSilhouette = scheme == .dark ? Palette.hamsterDark : Palette.hamsterLight

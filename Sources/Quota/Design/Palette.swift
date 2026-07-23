@@ -42,6 +42,18 @@ enum Palette {
     }
 }
 
+/// Maps a raw *used* percent + display mode into what the UI shows, so the
+/// number/gauge and the (risk-based) color are computed in one place.
+struct Meter {
+    let usedPercent: Int
+    let showRemaining: Bool
+
+    /// The number to display: consumed amount, or remaining amount.
+    var displayPercent: Int { showRemaining ? 100 - usedPercent : usedPercent }
+    /// Color always reflects risk (how much is consumed), regardless of mode.
+    var color: Color { Palette.statusColor(for: usedPercent, colorCoding: true) }
+}
+
 extension Color {
     init(hex: UInt32, alpha: Double = 1.0) {
         let r = Double((hex >> 16) & 0xFF) / 255.0

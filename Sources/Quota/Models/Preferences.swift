@@ -10,6 +10,9 @@ final class Preferences: ObservableObject {
     @AppStorage("iconConcept") private var iconConceptRaw: String = IconConcept.hamster.rawValue
     @AppStorage("colorCoding") var colorCoding: Bool = true
     @AppStorage("showPercent") var showPercent: Bool = true
+    /// false = show consumed amount (기본), true = show remaining amount.
+    /// Only flips the displayed number + gauge fill; color still tracks risk.
+    @AppStorage("showRemaining") var showRemaining: Bool = false
     /// Which limit drives the menu-bar icon: 5-hour window vs weekly all-models.
     @AppStorage("menuBarMetric") private var menuBarMetricRaw: String = MenuBarMetric.fiveHour.rawValue
     /// Polling interval in seconds. 180 (the endpoint's safe floor) is the

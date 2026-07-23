@@ -8,8 +8,9 @@ struct PopoverView: View {
     var onQuit: () -> Void
 
     private var snap: UsageSnapshot { model.snapshot }
-    private var fivePct: Int { snap.fiveHourPercent }
-    private var fiveColor: Color { Palette.statusColor(for: fivePct, colorCoding: true) }
+    private var fiveMeter: Meter { Meter(usedPercent: snap.fiveHourPercent, showRemaining: prefs.showRemaining) }
+    /// Suffix clarifying that shown numbers are remaining (vs consumed).
+    private var modeSuffix: String { prefs.showRemaining ? " · 남음" : "" }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,7 +36,7 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 9) {
-            RingView(percent: fivePct, color: fiveColor, lineWidth: 3, diameter: 18)
+            RingView(percent: fiveMeter.displayPercent, color: fiveMeter.color, lineWidth: 3, diameter: 18)
             Text("Quota")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Palette.textPrimary)
@@ -132,9 +133,9 @@ struct PopoverView: View {
     private var primaryGauge: some View {
         VStack(spacing: 0) {
             ZStack {
-                RingView(percent: fivePct, color: fiveColor, lineWidth: 8, diameter: 132)
+                RingView(percent: fiveMeter.displayPercent, color: fiveMeter.color, lineWidth: 8, diameter: 132)
                 HStack(alignment: .lastTextBaseline, spacing: 1) {
-                    Text("\(fivePct)")
+                    Text("\(fiveMeter.displayPercent)")
                         .font(.system(size: 42, weight: .semibold))
                         .foregroundStyle(Palette.textPrimary)
                         .tracking(-1)
@@ -146,7 +147,7 @@ struct PopoverView: View {
             .frame(width: 132, height: 132)
             .padding(.bottom, 12)
 
-            Text("5시간 한도")
+            Text("5시간 한도" + modeSuffix)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Palette.textSecondary)
                 .padding(.bottom, 3)
@@ -164,7 +165,7 @@ struct PopoverView: View {
     private var weeklySection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("7일 한도")
+                Text("7일 한도" + modeSuffix)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Palette.textSecondary)
                 Spacer()
@@ -174,13 +175,13 @@ struct PopoverView: View {
             }
             .padding(.bottom, 14)
 
-            usageBar(label: "전체 모델",
-                     percent: snap.weeklyAllPercent,
-                     color: Palette.statusColor(for: snap.weeklyAllPercent, colorCoding: true))
+            usageBar(meter: Meter(usedPercent: snap.weeklyAllPercent, showRemaining: prefs.showRemaining),
+                     label: "전체 모델", color: nil)
 
             ForEach(snap.models) { m in
                 Spacer().frame(height: 16)
-                usageBar(label: m.name, percent: m.percent, color: Palette.fablePurple)
+                usageBar(meter: Meter(usedPercent: m.percent, showRemaining: prefs.showRemaining),
+                         label: m.name, color: Palette.fablePurple)
             }
         }
         .padding(.horizontal, 18)
@@ -188,14 +189,17 @@ struct PopoverView: View {
         .padding(.bottom, 18)
     }
 
-    private func usageBar(label: String, percent: Int, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+    /// `color` nil = use the meter's risk color; non-nil = fixed brand color
+    /// (e.g. Fable purple). Fill width + number follow the display mode.
+    private func usageBar(meter: Meter, label: String, color: Color?) -> some View {
+        let pct = meter.displayPercent
+        return VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text(label)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Palette.textPrimary)
                 Spacer()
-                Text("\(percent)%")
+                Text("\(pct)%")
                     .font(.system(size: 14, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(Palette.textPrimary)
@@ -203,8 +207,8 @@ struct PopoverView: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Palette.trackBar)
-                    Capsule().fill(color)
-                        .frame(width: max(0, geo.size.width * CGFloat(percent) / 100))
+                    Capsule().fill(color ?? meter.color)
+                        .frame(width: max(0, geo.size.width * CGFloat(pct) / 100))
                 }
             }
             .frame(height: 5)

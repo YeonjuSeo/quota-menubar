@@ -10,16 +10,21 @@ struct MenuBarIconView: View {
 
     @State private var pulsing = false
 
-    private var percent: Int { model.menuBarPercent }
+    private var usedPercent: Int { model.menuBarPercent }
     private var concept: IconConcept { prefs.iconConcept }
+    private var displayPercent: Int {
+        prefs.showRemaining ? 100 - usedPercent : usedPercent
+    }
 
+    /// Pulse always keys off risk (consumed), regardless of display mode.
     private var shouldPulse: Bool {
-        prefs.pulseWhenCritical && percent >= 90
+        prefs.pulseWhenCritical && usedPercent >= 90
     }
 
     var body: some View {
         HStack(spacing: 5) {
-            UsageIconCanvas(concept: concept, percent: percent,
+            UsageIconCanvas(concept: concept, usedPercent: usedPercent,
+                            showRemaining: prefs.showRemaining,
                             scheme: scheme, colorCoding: prefs.colorCoding)
             .frame(width: concept.menuBarSize.width, height: concept.menuBarSize.height)
             .scaleEffect(pulsing ? 1.14 : 1.0)
@@ -29,7 +34,7 @@ struct MenuBarIconView: View {
                        value: pulsing)
 
             if prefs.showPercent {
-                Text("\(percent)%")
+                Text("\(displayPercent)%")
                     .font(.system(size: 12.5, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
