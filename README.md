@@ -3,8 +3,6 @@
 맥 메뉴바에 Claude 사용량을 아이콘 + `NN%`로 상시 표시하고, 클릭하면 5시간 한도·7일
 한도·요금 상태를 보여주는 팝오버가 열리는 메뉴바 앱입니다. (RunCat 스타일)
 
-<img src="design/design_handoff_quota_menubar/reference_popup.png" width="360" alt="popover reference" />
-
 ## 아이콘 6종
 설정에서 택1 — **Hamster**(기본, 볼이 쓸수록 쪼그라듦) / Donut / Ring / Eclipse(잠식 원반)
 / Battery / Liquid. 색상 코딩 켜짐 시 사용량 3단계(초록 <50 · 주황 <80 · 빨강 ≥80)로
