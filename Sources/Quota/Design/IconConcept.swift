@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// The six menu-bar icon styles from the design handoff.
@@ -26,4 +27,14 @@ enum IconConcept: String, CaseIterable, Identifiable, Codable {
 
     /// Hamster ignores color coding (always mono).
     var supportsColorCoding: Bool { self != .hamster }
+
+    /// Render size in the menu bar (some glyphs are wider/taller than square).
+    var menuBarSize: CGSize {
+        switch self {
+        case .battery: return CGSize(width: 22, height: 15)
+        case .hamster: return CGSize(width: 23, height: 21)
+        case .liquid:  return CGSize(width: 15, height: 17)
+        default:       return CGSize(width: 17, height: 17)
+        }
+    }
 }

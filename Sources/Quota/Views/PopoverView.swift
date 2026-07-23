@@ -40,10 +40,8 @@ struct PopoverView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Palette.textPrimary)
             Spacer(minLength: 0)
-            Circle()
-                .fill(snap.isPeak ? Palette.amber : Palette.onlineDot)
-                .frame(width: 7, height: 7)
-            Text(snap.isPeak ? "Peak" : "Off-peak")
+            Circle().fill(statusBadge.color).frame(width: 7, height: 7)
+            Text(statusBadge.text)
                 .font(.system(size: 12))
                 .foregroundStyle(Palette.textSecondary)
             overflowMenu
@@ -51,6 +49,18 @@ struct PopoverView: View {
         .padding(.horizontal, 18)
         .padding(.top, 15)
         .padding(.bottom, 13)
+    }
+
+    /// Real connection status (replaces the old fabricated Off-peak label —
+    /// the usage endpoint provides no peak-window data).
+    private var statusBadge: (color: Color, text: String) {
+        switch model.loadState {
+        case .loaded:      return (Palette.onlineDot, "실시간")
+        case .loading:     return (Palette.textTertiary, "동기화 중")
+        case .signedOut:   return (Palette.textTertiary, "샘플")
+        case .rateLimited: return (Palette.amber, "제한됨")
+        case .error:       return (Palette.red, "오류")
+        }
     }
 
     private var overflowMenu: some View {
@@ -204,15 +214,15 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack {
-            Text(snap.rateLabel)
-                .font(.system(size: 12))
-                .foregroundStyle(Palette.textSecondary)
-            Spacer()
-            if !snap.peakText.isEmpty {
-                Text(snap.peakText)
+            if let credits = snap.creditsText {
+                Text(credits)
                     .font(.system(size: 12))
                     .foregroundStyle(Palette.textSecondary)
             }
+            Spacer()
+            Text(TimeText.updatedAgo(snap.lastUpdated))
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.textTertiary)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 11)

@@ -17,6 +17,21 @@ struct UsageIconCanvas: View {
     var hamsterSilhouette: Color = Palette.hamsterLight
     var hamsterFace: Color = Palette.hamsterFaceLight
 
+    /// Resolves every color from the appearance + settings, so callers (menu
+    /// bar, settings preview, snapshots) don't each duplicate the logic.
+    /// `scheme` = the background the icon sits on (dark menu bar / light card).
+    init(concept: IconConcept, percent: Int, scheme: ColorScheme, colorCoding: Bool) {
+        let coded = colorCoding && concept.supportsColorCoding
+        self.concept = concept
+        self.fraction = Double(percent) / 100
+        self.color = coded
+            ? Palette.statusColor(for: percent, colorCoding: true)
+            : (scheme == .dark ? Palette.hamsterDark : Palette.mono)
+        self.trackColor = scheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.16)
+        self.hamsterSilhouette = scheme == .dark ? Palette.hamsterDark : Palette.hamsterLight
+        self.hamsterFace = scheme == .dark ? Palette.hamsterFaceDark : Palette.hamsterFaceLight
+    }
+
     var body: some View {
         Canvas { ctx, size in
             let p = max(0, min(1, fraction))

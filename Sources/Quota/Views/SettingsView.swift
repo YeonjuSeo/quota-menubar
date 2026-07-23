@@ -21,15 +21,8 @@ struct SettingsView: View {
                 HStack(spacing: 18) {
                     ForEach([20, 60, 95], id: \.self) { p in
                         VStack(spacing: 6) {
-                            UsageIconCanvas(
-                                concept: prefs.iconConcept,
-                                fraction: Double(p) / 100,
-                                color: Palette.statusColor(for: p,
-                                    colorCoding: prefs.colorCoding && prefs.iconConcept.supportsColorCoding),
-                                trackColor: Color.black.opacity(0.14),
-                                hamsterSilhouette: Palette.hamsterLight,
-                                hamsterFace: Palette.hamsterFaceLight
-                            )
+                            UsageIconCanvas(concept: prefs.iconConcept, percent: p,
+                                            scheme: .light, colorCoding: prefs.colorCoding)
                             .frame(width: 34, height: 32)
                             Text("\(p)%").font(.caption2).foregroundStyle(.secondary)
                         }

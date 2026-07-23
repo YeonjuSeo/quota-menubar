@@ -96,12 +96,27 @@ struct UsageAPIClient {
             weeklyAllPercent: weeklyPct,
             weeklyResetText: TimeText.resetsAt(weeklyReset),
             models: models,
-            // The usage endpoint carries no peak-window info; leave neutral.
-            isPeak: false,
-            rateLabel: "표준 요금",
-            peakText: "",
+            creditsText: creditsText(from: root),
             lastUpdated: Date()
         )
+    }
+
+    /// Usage-credits summary from `spend` (amounts are minor units, e.g. cents).
+    private static func creditsText(from root: [String: Any]) -> String? {
+        guard let spend = root["spend"] as? [String: Any] else { return nil }
+        if (spend["enabled"] as? Bool) == true,
+           let limit = spend["limit"] as? [String: Any],
+           let used = spend["used"] as? [String: Any] {
+            let exp = (limit["exponent"] as? Int) ?? 2
+            let divisor = pow(10.0, Double(exp))
+            let remaining = Double((limit["amount_minor"] as? Int ?? 0)
+                                   - (used["amount_minor"] as? Int ?? 0)) / divisor
+            return String(format: "크레딧 $%.2f 남음", max(0, remaining))
+        }
+        if (spend["disabled_reason"] as? String) == "out_of_credits" {
+            return "크레딧 소진"
+        }
+        return nil
     }
 
     // MARK: helpers

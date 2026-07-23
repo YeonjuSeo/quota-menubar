@@ -9,6 +9,9 @@ struct ModelUsage: Identifiable, Equatable {
 
 /// Normalized usage snapshot that drives every view. Populated from the
 /// oauth/usage response, or from sample data when signed out.
+///
+/// Note: the usage endpoint carries no peak/off-peak-pricing info, so this
+/// model deliberately omits it rather than fabricating an "Off-peak" label.
 struct UsageSnapshot: Equatable {
     /// 5-hour rolling window usage, 0…100.
     var fiveHourPercent: Int
@@ -22,10 +25,9 @@ struct UsageSnapshot: Equatable {
     /// Per-model weekly rows (Opus/Fable/…).
     var models: [ModelUsage]
 
-    /// Rate window state.
-    var isPeak: Bool
-    var rateLabel: String       // "표준 요금" / "피크"
-    var peakText: String        // "10시간 59분 후 피크"
+    /// Usage-credits status when meaningful (e.g. "$4.20 남음" / "크레딧 소진"),
+    /// else nil. Derived from the response `spend`/`extra_usage`.
+    var creditsText: String?
 
     var lastUpdated: Date
 
@@ -35,9 +37,7 @@ struct UsageSnapshot: Equatable {
         weeklyAllPercent: 19,
         weeklyResetText: "일요일 21:59 초기화",
         models: [ModelUsage(name: "Fable 5", percent: 25)],
-        isPeak: false,
-        rateLabel: "표준 요금",
-        peakText: "10시간 59분 후 피크",
+        creditsText: nil,
         lastUpdated: .distantPast
     )
 }
