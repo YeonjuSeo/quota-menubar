@@ -59,6 +59,28 @@ Sources/Quota/
 - 엔드포인트/스키마/헤더와 OAuth 파라미터는 커뮤니티 리버스엔지니어링으로 확인된 실제 값을
   사용합니다. 로그인·토큰이 없으면 UI는 샘플 데이터로 렌더됩니다.
 
-## 배포(Phase 5, 미완)
-파일로 공유하려면 Developer ID 서명 + notarization 필요(안 하면 Gatekeeper 차단).
-`scripts/make_app.sh`는 로컬 개발용 ad-hoc 서명까지만 합니다.
+## 배포 (지인에게 서명된 dmg 공유)
+`scripts/make_app.sh`는 로컬 개발용 ad-hoc 서명까지만 하므로, 남에게 주면 Gatekeeper가
+차단합니다. 서명·공증된 `.dmg`는 `scripts/release.sh`로 만듭니다.
+
+**준비물(1회):** Apple Developer 계정($99/년) + **Developer ID Application** 인증서.
+```bash
+# 인증서 확인
+security find-identity -v -p codesigning
+# 공증 자격증명 저장(앱 암호는 appleid.apple.com에서 발급)
+xcrun notarytool store-credentials quota-notary \
+  --apple-id "you@example.com" --team-id "TEAMID" --password "app-specific-pw"
+```
+**릴리스:**
+```bash
+DEV_ID="Developer ID Application: Your Name (TEAMID)" \
+NOTARY_PROFILE="quota-notary" scripts/release.sh
+# → Quota.dmg 생성. 받는 사람은 Applications로 드래그 후 실행.
+```
+정식 Developer ID로 서명하면 **로그인 토큰이 업데이트 후에도 유지**됩니다(ad-hoc은 빌드마다
+서명이 바뀌어 재로그인 필요). 각 사용자는 자기 Claude 계정으로 로그인하며, 토큰은 각자
+Keychain에만 저장됩니다.
+
+> **주의:** 이 앱은 Claude Code의 client_id/User-Agent와 비공개 엔드포인트를 사용하는
+> 비공식 도구입니다(ToS 회색지대). 공유·사용은 본인 책임이며, 위 README의 경고를 함께
+> 전달하세요.
