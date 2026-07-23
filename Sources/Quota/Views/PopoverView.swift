@@ -9,8 +9,9 @@ struct PopoverView: View {
 
     private var snap: UsageSnapshot { model.snapshot }
     private var fiveMeter: Meter { Meter(usedPercent: snap.fiveHourPercent, showRemaining: prefs.showRemaining) }
-    /// Suffix clarifying that shown numbers are remaining (vs consumed).
-    private var modeSuffix: String { prefs.showRemaining ? " · 남음" : "" }
+    /// Explicit label (both modes) so it's never ambiguous whether the
+    /// numbers/graphs show consumed vs remaining amount.
+    private var modeSuffix: String { prefs.showRemaining ? " · 남은 양" : " · 사용량" }
 
     var body: some View {
         VStack(spacing: 0) {
