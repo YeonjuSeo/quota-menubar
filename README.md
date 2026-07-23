@@ -1,7 +1,12 @@
 # Quota — macOS 메뉴바 Claude 사용량 표시 앱
 
 맥 메뉴바에 Claude 사용량을 아이콘 + `NN%`로 상시 표시하고, 클릭하면 5시간 한도·7일
-한도·요금 상태를 보여주는 팝오버가 열리는 메뉴바 앱입니다. (RunCat 스타일)
+한도·요금 상태를 보여주는 팝오버가 열리는 메뉴바 앱입니다. 
+
+<img width="136" height="50" alt="image" src="https://github.com/user-attachments/assets/d01dd02e-0eff-4366-93ae-cb75ac4850f1" />
+<img width="626" height="984" alt="image" src="https://github.com/user-attachments/assets/e988ab74-489b-4530-9bf4-4559608c125f" />
+
+
 
 ## 아이콘 6종
 설정에서 택1 — **Hamster**(기본, 볼이 쓸수록 쪼그라듦) / Donut / Ring / Eclipse(잠식 원반)
