@@ -10,17 +10,26 @@
 / Battery / Liquid. 색상 코딩 켜짐 시 사용량 3단계(초록 <50 · 주황 <80 · 빨강 ≥80)로
 색이 바뀌고, 90% 이상이면 아이콘이 맥동합니다. (Hamster는 항상 단색)
 
-## 빌드 & 실행
+## 설치 — 각자 빌드해서 쓰기 (Apple 계정 불필요)
+직접 빌드한 앱은 Gatekeeper에 막히지 않습니다. 필요한 건 **macOS 14+ 와 Xcode
+(또는 Command Line Tools)** 뿐.
 ```bash
-# 개발 실행(.app 번들 생성 후 실행 — 알림/OAuth/Keychain 동작에 번들 필요)
-./scripts/make_app.sh debug
-open Quota.app
-
-# 아이콘/팝오버 레퍼런스 PNG만 렌더 (화면 녹화 권한 불필요)
-swift build && QUOTA_SNAPSHOT=/tmp/quota_snaps ./.build/debug/Quota
+git clone <이 저장소 URL> && cd ClaudeGauge
+./scripts/make_app.sh          # release 빌드 → Quota.app 생성(로컬 ad-hoc 서명)
+open Quota.app                 # 메뉴바에 아이콘 등장
 ```
+처음 실행하면:
+- **Claude Code 사용자**: "키체인 접근 허용" 프롬프트 → *항상 허용* → 바로 실제 사용량 표시.
+- 그 외: 팝오버의 **로그인** → 브라우저에서 Claude 로그인·승인 → 자동 복귀.
+
 > `swift run`으로 맨 바이너리를 직접 실행하면 UserNotifications가 앱 번들을 요구해
-> 크래시합니다. 항상 `.app` 번들로 실행하세요.
+> 크래시합니다. 항상 `.app` 번들(`make_app.sh`)로 실행하세요.
+
+### 개발용
+```bash
+./scripts/make_app.sh debug && open Quota.app          # 디버그 빌드
+swift build && QUOTA_SNAPSHOT=/tmp/quota_snaps ./.build/debug/Quota   # 아이콘/팝오버 PNG 렌더
+```
 
 ## 구조
 ```
