@@ -150,17 +150,17 @@ final class AuthService: NSObject {
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
-        let http = resp as? HTTPURLResponse
-        let status = http?.statusCode ?? -1
-        let bodyText = String(data: data, encoding: .utf8) ?? ""
-
-        // Diagnostic log (server error bodies only — no local secrets).
-        Self.debugLog("token \(Config.oauthTokenURL.host ?? "") status=\(status) body=\(bodyText.prefix(500))")
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
 
         guard status == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let access = json["access_token"] as? String
-        else { throw AuthError.tokenExchangeFailed("(\(status)) \(bodyText.prefix(160))") }
+        else {
+            // Log the ERROR body only (never a success body — it holds tokens).
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            Self.debugLog("token status=\(status) body=\(bodyText.prefix(300))")
+            throw AuthError.tokenExchangeFailed("(\(status)) \(bodyText.prefix(160))")
+        }
 
         var expires: Date?
         if let secs = json["expires_in"] as? Double { expires = Date().addingTimeInterval(secs) }
