@@ -25,9 +25,9 @@ struct UsageIconCanvas: View {
     init(concept: IconConcept, usedPercent: Int, showRemaining: Bool,
          scheme: ColorScheme, colorCoding: Bool) {
         let displayPercent = showRemaining ? 100 - usedPercent : usedPercent
-        // Hamster cheeks always shrink with *consumption* (cheeks = food left),
-        // so they read correctly in both modes; gauges fill toward the display.
-        let fillPercent = concept == .hamster ? usedPercent : displayPercent
+        // Every icon (hamster cheeks included) fills toward the displayed
+        // number: bigger number → fuller gauge / plumper cheeks.
+        let fillPercent = displayPercent
         let coded = colorCoding && concept.supportsColorCoding
         self.concept = concept
         self.fraction = Double(fillPercent) / 100
@@ -170,7 +170,8 @@ struct UsageIconCanvas: View {
     private func drawHamster(_ ctx: GraphicsContext, _ size: CGSize, _ p: Double) {
         let f = fit(size, 100, 96)
         let s = f.0
-        let cheekR = (29 - 25 * p) * s
+        // Cheeks grow with the displayed value (plump = big number).
+        let cheekR = (4 + 25 * p) * s
 
         func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> Path {
             let c = pt(x, y, f)
