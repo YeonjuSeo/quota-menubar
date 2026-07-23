@@ -1,5 +1,4 @@
 import Foundation
-import AuthenticationServices
 import CryptoKit
 import AppKit
 
@@ -11,89 +10,91 @@ enum AuthError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured:
-            return "OAuth 설정이 완료되지 않았습니다 (Phase 0: client_id 확인 필요)."
+        case .notConfigured: return "OAuth 설정이 없습니다."
         case .cancelled: return "로그인이 취소되었습니다."
-        case .invalidCallback: return "로그인 응답을 해석할 수 없습니다."
+        case .invalidCallback: return "붙여넣은 코드를 해석할 수 없습니다."
         case .tokenExchangeFailed: return "토큰 발급에 실패했습니다."
         }
     }
 }
 
-/// OAuth 2.0 PKCE login via ASWebAuthenticationSession. The session intercepts
-/// the custom `quota://` redirect itself, so no Info.plist URL-scheme
-/// registration is required (works from a plain SwiftPM executable too).
+/// OAuth 2.0 Authorization Code + PKCE, using Claude Code's own client.
+///
+/// Claude Code's registered redirect is a console callback page that displays
+/// `code#state` for the user to copy — there is no custom-scheme interception.
+/// So sign-in opens the browser and prompts the user to paste the code back
+/// (the same flow other Claude-subscription tools use).
 @MainActor
-final class AuthService: NSObject, ASWebAuthenticationPresentationContextProviding {
+final class AuthService: NSObject {
 
     func signIn() async throws -> OAuthToken {
         guard !Config.oauthClientID.isEmpty else { throw AuthError.notConfigured }
 
         let verifier = Self.randomURLSafe(64)
         let challenge = Self.codeChallenge(for: verifier)
+        let state = Self.randomURLSafe(16)
 
         var comps = URLComponents(url: Config.oauthAuthorizeURL, resolvingAgainstBaseURL: false)!
         comps.queryItems = [
+            .init(name: "code", value: "true"),
             .init(name: "response_type", value: "code"),
             .init(name: "client_id", value: Config.oauthClientID),
             .init(name: "redirect_uri", value: Config.oauthRedirectURI),
             .init(name: "scope", value: Config.oauthScopes),
             .init(name: "code_challenge", value: challenge),
             .init(name: "code_challenge_method", value: "S256"),
-            .init(name: "state", value: Self.randomURLSafe(16))
+            .init(name: "state", value: state)
         ]
+        NSWorkspace.shared.open(comps.url!)
 
-        let callback = try await authenticate(url: comps.url!)
-        guard let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == "code" })?.value
-        else { throw AuthError.invalidCallback }
+        guard let pasted = promptForCode() else { throw AuthError.cancelled }
+        // The console callback shows "CODE#STATE"; take the code part.
+        let code = pasted.split(separator: "#").first.map(String.init) ?? pasted
+        guard !code.isEmpty else { throw AuthError.invalidCallback }
 
-        return try await exchange(code: code, verifier: verifier)
+        return try await exchange(code: code, verifier: verifier, state: state)
     }
 
-    /// Refresh an expired access token.
     func refresh(_ token: OAuthToken) async throws -> OAuthToken {
         guard let refresh = token.refreshToken, !Config.oauthClientID.isEmpty else {
             throw AuthError.tokenExchangeFailed
         }
-        let body = [
+        return try await postToken([
             "grant_type": "refresh_token",
             "refresh_token": refresh,
             "client_id": Config.oauthClientID
-        ]
-        return try await postToken(body)
+        ])
     }
 
-    // MARK: - ASWebAuthenticationSession
+    // MARK: - Manual code entry
 
-    private func authenticate(url: URL) async throws -> URL {
-        try await withCheckedThrowingContinuation { cont in
-            let session = ASWebAuthenticationSession(
-                url: url, callbackURLScheme: Config.oauthRedirectScheme
-            ) { callbackURL, error in
-                if let callbackURL {
-                    cont.resume(returning: callbackURL)
-                } else if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
-                    cont.resume(throwing: AuthError.cancelled)
-                } else {
-                    cont.resume(throwing: error ?? AuthError.invalidCallback)
-                }
-            }
-            session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = false
-            session.start()
-        }
+    private func promptForCode() -> String? {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Claude 계정 로그인"
+        alert.informativeText = "열린 브라우저에서 로그인·승인한 뒤,\n표시된 인증 코드를 아래에 붙여넣으세요."
+        alert.addButton(withTitle: "확인")
+        alert.addButton(withTitle: "취소")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        field.placeholderString = "인증 코드 붙여넣기"
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        return alert.runModal() == .alertFirstButtonReturn
+            ? field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            : nil
     }
 
-    private func exchange(code: String, verifier: String) async throws -> OAuthToken {
-        let body = [
+    // MARK: - Token exchange
+
+    private func exchange(code: String, verifier: String, state: String) async throws -> OAuthToken {
+        try await postToken([
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": Config.oauthRedirectURI,
             "client_id": Config.oauthClientID,
-            "code_verifier": verifier
-        ]
-        return try await postToken(body)
+            "code_verifier": verifier,
+            "state": state
+        ])
     }
 
     private func postToken(_ body: [String: String]) async throws -> OAuthToken {
@@ -109,12 +110,11 @@ final class AuthService: NSObject, ASWebAuthenticationPresentationContextProvidi
               let access = json["access_token"] as? String
         else { throw AuthError.tokenExchangeFailed }
 
-        let refresh = json["refresh_token"] as? String
         var expires: Date?
-        if let secs = json["expires_in"] as? Double {
-            expires = Date().addingTimeInterval(secs)
-        }
-        return OAuthToken(accessToken: access, refreshToken: refresh, expiresAt: expires)
+        if let secs = json["expires_in"] as? Double { expires = Date().addingTimeInterval(secs) }
+        return OAuthToken(accessToken: access,
+                          refreshToken: json["refresh_token"] as? String,
+                          expiresAt: expires)
     }
 
     // MARK: - PKCE
@@ -124,16 +124,8 @@ final class AuthService: NSObject, ASWebAuthenticationPresentationContextProvidi
         _ = SecRandomCopyBytes(kSecRandomDefault, count, &bytes)
         return Data(bytes).base64URLEncoded()
     }
-
     private static func codeChallenge(for verifier: String) -> String {
-        let hash = SHA256.hash(data: Data(verifier.utf8))
-        return Data(hash).base64URLEncoded()
-    }
-
-    // MARK: - Presentation anchor
-
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        NSApplication.shared.keyWindow ?? ASPresentationAnchor()
+        Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
     }
 }
 

@@ -39,7 +39,15 @@ Sources/Quota/
 ## 데이터 소스 & 인증
 - **인증 우선순위**: 자체 OAuth 로그인 토큰(Keychain) → 없으면 Claude Code CLI 토큰
   (Keychain `Claude Code-credentials` 또는 `~/.claude/.credentials.json`) 자동 감지.
-- **엔드포인트**: `GET https://api.anthropic.com/api/oauth/usage` (5시간·주간·모델별 %).
+  - Claude Code 사용자는 **로그인 없이** 앱이 기존 토큰을 재사용합니다. 다른 앱이 그 항목을
+    읽으므로 **첫 실행 시 "키체인 접근 허용" 프롬프트**가 뜹니다 → "항상 허용".
+  - Claude Code가 없으면 **OAuth 로그인**: 브라우저가 열리고 로그인·승인 후 표시되는 인증
+    코드를 앱에 붙여넣습니다(콘솔 콜백 방식).
+- **엔드포인트**: `GET https://api.anthropic.com/api/oauth/usage`.
+  - 헤더: `Authorization: Bearer …`, `anthropic-beta: oauth-2025-04-20`,
+    **`User-Agent: claude-code/<version>` (필수 — 없으면 429 도배)**.
+  - 응답: `five_hour.utilization`, `seven_day.utilization`, `seven_day_<model>.utilization`
+    (각각 0–100 %) + `resets_at`(ISO8601).
 - **폴링**: 기본 300초, 최소 180초. 429 시 지수 백오프.
 - **토큰은 각자 Keychain에만 저장**, 외부 서버로 절대 전송하지 않습니다.
 
@@ -48,10 +56,8 @@ Sources/Quota/
   예고 없이 변경·차단될 수 있습니다.
 - 자체 OAuth는 Claude Code의 client_id/User-Agent를 사용 → **공식 클라이언트 사칭 성격의
   ToS 회색지대**입니다. 공개 배포·사용은 본인 책임입니다.
-- **Phase 0(미완):** `Services/Config.swift`의 `oauthClientID`·`userAgent`·토큰 URL과
-  `UsageAPIClient.parse()`의 필드명은 **실제 oauth/usage 응답을 캡처해 확정해야** 합니다
-  (현재는 CLI 토큰 fallback 경로 + 유연 디코딩으로 동작하도록 작성). 로그인 안 된 상태에서는
-  샘플 데이터로 UI가 렌더됩니다.
+- 엔드포인트/스키마/헤더와 OAuth 파라미터는 커뮤니티 리버스엔지니어링으로 확인된 실제 값을
+  사용합니다. 로그인·토큰이 없으면 UI는 샘플 데이터로 렌더됩니다.
 
 ## 배포(Phase 5, 미완)
 파일로 공유하려면 Developer ID 서명 + notarization 필요(안 하면 Gatekeeper 차단).

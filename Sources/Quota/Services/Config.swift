@@ -12,20 +12,23 @@ enum Config {
     /// Subscription usage endpoint (same data as Claude Code `/usage`).
     static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
-    /// A correct, CLI-shaped User-Agent is REQUIRED or the endpoint 429s
-    /// instantly. TODO(Phase 0): confirm the exact current string.
-    static let userAgent = "claude-cli/1.0.0 (external, quota-menubar)"
+    /// The `claude-code/<version>` User-Agent is REQUIRED — without it the
+    /// endpoint drops into an aggressively rate-limited bucket (persistent 429).
+    static let userAgent = "claude-code/1.0.0"
 
     /// OAuth beta header Claude Code sends with subscription requests.
     static let anthropicBeta = "oauth-2025-04-20"
 
-    // MARK: OAuth (PKCE) — TODO(Phase 0): confirm against Claude Code.
-    static let oauthClientID = "" // e.g. "9d1c250a-..." — fill from Phase 0
+    // MARK: OAuth (Authorization Code + PKCE)
+    // These are Claude Code's own OAuth parameters. Anthropic does not issue
+    // client IDs to third parties, so reusing this one is a ToS grey area
+    // (see README). The manual-paste redirect below is what Claude Code uses:
+    // the browser lands on a console page showing `code#state` to paste back.
+    static let oauthClientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     static let oauthAuthorizeURL = URL(string: "https://claude.ai/oauth/authorize")!
     static let oauthTokenURL = URL(string: "https://console.anthropic.com/v1/oauth/token")!
-    static let oauthRedirectScheme = "quota"
-    static let oauthRedirectURI = "quota://callback"
-    static let oauthScopes = "org:read_usage"
+    static let oauthRedirectURI = "https://console.anthropic.com/oauth/code/callback"
+    static let oauthScopes = "org:create_api_key user:profile user:inference"
 
     // MARK: Local credential sources
     /// Keychain generic-password service name Claude Code stores its creds under.
