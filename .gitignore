@@ -1,0 +1,5 @@
+.build/
+Quota.app/
+*.xcodeproj
+.DS_Store
+.swiftpm/

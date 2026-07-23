@@ -1,0 +1,240 @@
+import SwiftUI
+
+/// Apple-style light popover reproducing the Quota handoff (308px wide).
+struct PopoverView: View {
+    @ObservedObject var model: UsageModel
+    @ObservedObject var prefs: Preferences
+    var onOpenSettings: () -> Void
+    var onQuit: () -> Void
+
+    private var snap: UsageSnapshot { model.snapshot }
+    private var fivePct: Int { snap.fiveHourPercent }
+    private var fiveColor: Color { Palette.statusColor(for: fivePct, colorCoding: true) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            hairline
+            stateBanner
+            primaryGauge
+            hairline
+            weeklySection
+            hairline
+            footer
+        }
+        .frame(width: 308)
+        .background(Palette.popoverBG)
+        .environment(\.colorScheme, .light)
+    }
+
+    private var hairline: some View {
+        Rectangle().fill(Palette.hairline).frame(height: 1)
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(spacing: 9) {
+            RingView(percent: fivePct, color: fiveColor, lineWidth: 3, diameter: 18)
+            Text("Quota")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Palette.textPrimary)
+            Spacer(minLength: 0)
+            Circle()
+                .fill(snap.isPeak ? Palette.amber : Palette.onlineDot)
+                .frame(width: 7, height: 7)
+            Text(snap.isPeak ? "Peak" : "Off-peak")
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.textSecondary)
+            overflowMenu
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 15)
+        .padding(.bottom, 13)
+    }
+
+    private var overflowMenu: some View {
+        Menu {
+            Button("새로고침") { model.refreshNow() }
+            Button("설정…") { onOpenSettings() }
+            if case .loaded(.oauthLogin) = model.loadState {
+                Button("로그아웃") { model.signOut() }
+            }
+            Divider()
+            Button("Quota 종료") { onQuit() }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 14))
+                .foregroundStyle(Palette.textSecondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .frame(width: 22)
+    }
+
+    // MARK: Connection banner (only when not cleanly loaded)
+
+    @ViewBuilder private var stateBanner: some View {
+        switch model.loadState {
+        case .signedOut:
+            banner(text: "샘플 데이터 표시 중 — 로그인하면 실제 사용량이 보여요",
+                   tint: Palette.amber) {
+                Button("로그인") { Task { await model.signIn() } }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+        case .loading:
+            banner(text: "불러오는 중…", tint: Palette.textSecondary) { EmptyView() }
+        case .rateLimited:
+            banner(text: "요청이 제한되었습니다 (잠시 후 자동 재시도)",
+                   tint: Palette.amber) { EmptyView() }
+        case .error(let msg):
+            banner(text: msg, tint: Palette.red) {
+                Button("재시도") { model.refreshNow() }
+                    .controlSize(.small)
+            }
+        case .loaded(let source):
+            if source == .claudeCodeCLI {
+                banner(text: "Claude Code 계정 사용 중", tint: Palette.onlineDot) { EmptyView() }
+            } else {
+                EmptyView()
+            }
+        }
+    }
+
+    private func banner<Trailing: View>(text: String, tint: Color,
+                                        @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(tint).frame(width: 6, height: 6)
+            Text(text).font(.system(size: 11.5)).foregroundStyle(Palette.textSecondary)
+            Spacer(minLength: 0)
+            trailing()
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 9)
+        .background(tint.opacity(0.06))
+    }
+
+    // MARK: Primary 5-hour gauge
+
+    private var primaryGauge: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                RingView(percent: fivePct, color: fiveColor, lineWidth: 8, diameter: 132)
+                HStack(alignment: .lastTextBaseline, spacing: 1) {
+                    Text("\(fivePct)")
+                        .font(.system(size: 42, weight: .semibold))
+                        .foregroundStyle(Palette.textPrimary)
+                        .tracking(-1)
+                    Text("%")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Palette.textSecondary)
+                }
+            }
+            .frame(width: 132, height: 132)
+            .padding(.bottom, 12)
+
+            Text("5시간 한도")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Palette.textSecondary)
+                .padding(.bottom, 3)
+            Text(snap.fiveHourResetText)
+                .font(.system(size: 14))
+                .foregroundStyle(Palette.textPrimary)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 22)
+        .padding(.bottom, 18)
+    }
+
+    // MARK: Weekly limits
+
+    private var weeklySection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("7일 한도")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Palette.textSecondary)
+                Spacer()
+                Text(snap.weeklyResetText)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Palette.textTertiary)
+            }
+            .padding(.bottom, 14)
+
+            usageBar(label: "전체 모델",
+                     percent: snap.weeklyAllPercent,
+                     color: Palette.statusColor(for: snap.weeklyAllPercent, colorCoding: true))
+
+            ForEach(snap.models) { m in
+                Spacer().frame(height: 16)
+                usageBar(label: m.name, percent: m.percent, color: Palette.fablePurple)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 15)
+        .padding(.bottom, 18)
+    }
+
+    private func usageBar(label: String, percent: Int, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Palette.textPrimary)
+                Spacer()
+                Text("\(percent)%")
+                    .font(.system(size: 14, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(Palette.textPrimary)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Palette.trackBar)
+                    Capsule().fill(color)
+                        .frame(width: max(0, geo.size.width * CGFloat(percent) / 100))
+                }
+            }
+            .frame(height: 5)
+        }
+    }
+
+    // MARK: Footer
+
+    private var footer: some View {
+        HStack {
+            Text(snap.rateLabel)
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.textSecondary)
+            Spacer()
+            if !snap.peakText.isEmpty {
+                Text(snap.peakText)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Palette.textSecondary)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 11)
+    }
+}
+
+/// A progress ring drawn with SwiftUI trim (top-start, clockwise).
+struct RingView: View {
+    let percent: Int
+    let color: Color
+    var lineWidth: CGFloat
+    var diameter: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Palette.track, lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: CGFloat(percent) / 100)
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: diameter, height: diameter)
+    }
+}
