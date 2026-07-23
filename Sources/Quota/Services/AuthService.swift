@@ -6,14 +6,15 @@ enum AuthError: LocalizedError {
     case notConfigured
     case cancelled
     case invalidCallback
-    case tokenExchangeFailed
+    case tokenExchangeFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .notConfigured: return "OAuth 설정이 없습니다."
         case .cancelled: return "로그인이 취소되었습니다."
         case .invalidCallback: return "붙여넣은 코드를 해석할 수 없습니다."
-        case .tokenExchangeFailed: return "토큰 발급에 실패했습니다."
+        case .tokenExchangeFailed(let detail):
+            return "토큰 발급에 실패했습니다. \(detail)"
         }
     }
 }
@@ -29,35 +30,78 @@ final class AuthService: NSObject {
 
     func signIn() async throws -> OAuthToken {
         guard !Config.oauthClientID.isEmpty else { throw AuthError.notConfigured }
+        // Seamless loopback first; fall back to manual code paste if the
+        // browser never returns (e.g. loopback redirect not honored).
+        do {
+            return try await signInLoopback()
+        } catch is CancellationError {
+            throw AuthError.cancelled
+        } catch {
+            Self.debugLog("loopback failed (\(error)); falling back to manual paste")
+            return try await signInManual()
+        }
+    }
 
-        let verifier = Self.randomURLSafe(64)
+    private func authorizeURL(redirectURI: String, verifier: String, showCode: Bool) -> URL {
         let challenge = Self.codeChallenge(for: verifier)
-        let state = Self.randomURLSafe(16)
-
         var comps = URLComponents(url: Config.oauthAuthorizeURL, resolvingAgainstBaseURL: false)!
         comps.queryItems = [
-            .init(name: "code", value: "true"),
+            showCode ? .init(name: "code", value: "true") : nil,
             .init(name: "response_type", value: "code"),
             .init(name: "client_id", value: Config.oauthClientID),
-            .init(name: "redirect_uri", value: Config.oauthRedirectURI),
+            .init(name: "redirect_uri", value: redirectURI),
             .init(name: "scope", value: Config.oauthScopes),
             .init(name: "code_challenge", value: challenge),
             .init(name: "code_challenge_method", value: "S256"),
-            .init(name: "state", value: state)
-        ]
-        NSWorkspace.shared.open(comps.url!)
+            // Claude Code sets `state` to the SAME value as the code_verifier.
+            .init(name: "state", value: verifier)
+        ].compactMap { $0 }
+        return comps.url!
+    }
 
+    /// Seamless flow: spin up a localhost listener, redirect the browser back
+    /// to it automatically, no paste. Times out to allow the manual fallback.
+    private func signInLoopback() async throws -> OAuthToken {
+        let verifier = Self.randomURLSafe(32)
+        let server = LoopbackServer()
+        let port = try await server.start()
+        defer { server.stop() }
+        let redirect = "http://localhost:\(port)/callback"
+
+        NSWorkspace.shared.open(authorizeURL(redirectURI: redirect, verifier: verifier, showCode: false))
+
+        let callback = try await withThrowingTaskGroup(of: URL.self) { group -> URL in
+            group.addTask { try await server.waitForCallback() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(90))
+                throw AuthError.tokenExchangeFailed("loopback timeout")
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+
+        guard let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "code" })?.value, !code.isEmpty else {
+            throw AuthError.invalidCallback
+        }
+        return try await exchange(code: code, verifier: verifier, redirectURI: redirect)
+    }
+
+    /// Fallback: browser shows the code on the console callback page; paste it.
+    private func signInManual() async throws -> OAuthToken {
+        let verifier = Self.randomURLSafe(32)
+        NSWorkspace.shared.open(authorizeURL(redirectURI: Config.oauthRedirectURI,
+                                             verifier: verifier, showCode: true))
         guard let pasted = promptForCode() else { throw AuthError.cancelled }
-        // The console callback shows "CODE#STATE"; take the code part.
         let code = pasted.split(separator: "#").first.map(String.init) ?? pasted
         guard !code.isEmpty else { throw AuthError.invalidCallback }
-
-        return try await exchange(code: code, verifier: verifier, state: state)
+        return try await exchange(code: code, verifier: verifier, redirectURI: Config.oauthRedirectURI)
     }
 
     func refresh(_ token: OAuthToken) async throws -> OAuthToken {
         guard let refresh = token.refreshToken, !Config.oauthClientID.isEmpty else {
-            throw AuthError.tokenExchangeFailed
+            throw AuthError.tokenExchangeFailed("refresh token 없음")
         }
         return try await postToken([
             "grant_type": "refresh_token",
@@ -86,14 +130,14 @@ final class AuthService: NSObject {
 
     // MARK: - Token exchange
 
-    private func exchange(code: String, verifier: String, state: String) async throws -> OAuthToken {
+    private func exchange(code: String, verifier: String, redirectURI: String) async throws -> OAuthToken {
         try await postToken([
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": Config.oauthRedirectURI,
+            "redirect_uri": redirectURI,
             "client_id": Config.oauthClientID,
             "code_verifier": verifier,
-            "state": state
+            "state": verifier
         ])
     }
 
@@ -101,20 +145,38 @@ final class AuthService: NSObject {
         var req = URLRequest(url: Config.oauthTokenURL)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(Config.userAgent, forHTTPHeaderField: "User-Agent")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse, http.statusCode == 200,
+        let http = resp as? HTTPURLResponse
+        let status = http?.statusCode ?? -1
+        let bodyText = String(data: data, encoding: .utf8) ?? ""
+
+        // Diagnostic log (server error bodies only — no local secrets).
+        Self.debugLog("token \(Config.oauthTokenURL.host ?? "") status=\(status) body=\(bodyText.prefix(500))")
+
+        guard status == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let access = json["access_token"] as? String
-        else { throw AuthError.tokenExchangeFailed }
+        else { throw AuthError.tokenExchangeFailed("(\(status)) \(bodyText.prefix(160))") }
 
         var expires: Date?
         if let secs = json["expires_in"] as? Double { expires = Date().addingTimeInterval(secs) }
         return OAuthToken(accessToken: access,
                           refreshToken: json["refresh_token"] as? String,
                           expiresAt: expires)
+    }
+
+    private static func debugLog(_ msg: String) {
+        let line = "[\(Config.userAgent)] \(msg)\n"
+        let url = URL(fileURLWithPath: "/tmp/quota_auth.log")
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close()
+        } else {
+            try? Data(line.utf8).write(to: url)
+        }
     }
 
     // MARK: - PKCE

@@ -26,8 +26,10 @@ enum Config {
     // the browser lands on a console page showing `code#state` to paste back.
     static let oauthClientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     static let oauthAuthorizeURL = URL(string: "https://claude.ai/oauth/authorize")!
-    static let oauthTokenURL = URL(string: "https://console.anthropic.com/v1/oauth/token")!
-    static let oauthRedirectURI = "https://console.anthropic.com/oauth/code/callback"
+    // Anthropic migrated console.anthropic.com → platform.claude.com; the
+    // token exchange + callback now live on the new host.
+    static let oauthTokenURL = URL(string: "https://platform.claude.com/v1/oauth/token")!
+    static let oauthRedirectURI = "https://platform.claude.com/oauth/code/callback"
     static let oauthScopes = "org:create_api_key user:profile user:inference"
 
     // MARK: Local credential sources

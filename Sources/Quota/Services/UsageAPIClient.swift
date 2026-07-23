@@ -44,38 +44,57 @@ struct UsageAPIClient {
 
     // MARK: - Tolerant decoding
 
-    /// Real (undocumented) schema, confirmed from community reverse-engineering:
+    /// Real (undocumented) schema. The authoritative per-limit data is the
+    /// `limits` array; each entry has an int `percent`, a `kind`, `resets_at`,
+    /// and (for scoped rows) `scope.model.display_name`:
     /// ```
-    /// { "five_hour":  { "utilization": 33.0, "resets_at": "ISO8601" },
-    ///   "seven_day":  { "utilization": 13.0, "resets_at": "ISO8601" },
-    ///   "seven_day_opus": null,
-    ///   "seven_day_sonnet": { "utilization": 1.0, "resets_at": "ISO8601" },
-    ///   "extra_usage": { "is_enabled": false, "used_credits": null, ... } }
+    /// "limits": [
+    ///   { "kind":"session",       "percent":64, "resets_at":"…" },
+    ///   { "kind":"weekly_all",     "percent":23, "resets_at":"…" },
+    ///   { "kind":"weekly_scoped",  "percent":29, "resets_at":"…",
+    ///     "scope":{ "model":{ "display_name":"Fable" } } } ]
     /// ```
-    /// `utilization` is already a 0…100 percentage (1.0 == 1%, NOT a fraction).
+    /// (`five_hour`/`seven_day` objects mirror session/weekly_all; the old
+    /// `seven_day_<model>` keys are always null now.)
     static func parse(_ data: Data) throws -> UsageSnapshot {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw APIError.badResponse
         }
 
-        let five = root["five_hour"] as? [String: Any]
-        let weekly = root["seven_day"] as? [String: Any]
-
-        // Per-model weekly rows: any non-null "seven_day_<model>" object.
+        var fivePct = 0, weeklyPct = 0
+        var fiveReset: Date?, weeklyReset: Date?
         var models: [ModelUsage] = []
-        for (key, value) in root where key.hasPrefix("seven_day_") {
-            guard let d = value as? [String: Any] else { continue } // skip nulls
-            let pct = percentInt(d["utilization"])
-            let name = prettyModelName(String(key.dropFirst("seven_day_".count)))
-            models.append(ModelUsage(name: name, percent: pct))
+
+        let limits = root["limits"] as? [[String: Any]] ?? []
+        for limit in limits {
+            let pct = percentInt(limit["percent"])
+            let reset = isoDate(limit["resets_at"])
+            switch limit["kind"] as? String {
+            case "session":
+                fivePct = pct; fiveReset = reset
+            case "weekly_all":
+                weeklyPct = pct; weeklyReset = reset
+            case "weekly_scoped":
+                let name = ((limit["scope"] as? [String: Any])?["model"] as? [String: Any])?["display_name"] as? String
+                models.append(ModelUsage(name: prettyModelName(name ?? "모델"), percent: pct))
+            default:
+                break
+            }
         }
-        models.sort { $0.name < $1.name }
+
+        // Fallback to the flat objects if `limits` is absent.
+        if limits.isEmpty {
+            let five = root["five_hour"] as? [String: Any]
+            let weekly = root["seven_day"] as? [String: Any]
+            fivePct = percentInt(five?["utilization"]); fiveReset = isoDate(five?["resets_at"])
+            weeklyPct = percentInt(weekly?["utilization"]); weeklyReset = isoDate(weekly?["resets_at"])
+        }
 
         return UsageSnapshot(
-            fiveHourPercent: percentInt(five?["utilization"]),
-            fiveHourResetText: TimeText.resetsIn(isoDate(five?["resets_at"])),
-            weeklyAllPercent: percentInt(weekly?["utilization"]),
-            weeklyResetText: TimeText.resetsAt(isoDate(weekly?["resets_at"])),
+            fiveHourPercent: fivePct,
+            fiveHourResetText: TimeText.resetsIn(fiveReset),
+            weeklyAllPercent: weeklyPct,
+            weeklyResetText: TimeText.resetsAt(weeklyReset),
             models: models,
             // The usage endpoint carries no peak-window info; leave neutral.
             isPeak: false,
