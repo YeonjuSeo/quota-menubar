@@ -221,7 +221,7 @@ struct PopoverView: View {
                     .foregroundStyle(Palette.textSecondary)
             }
             Spacer()
-            Text(TimeText.updatedAgo(snap.lastUpdated))
+            Text(TimeText.updatedClock(snap.lastUpdated))
                 .font(.system(size: 12))
                 .foregroundStyle(Palette.textTertiary)
         }
