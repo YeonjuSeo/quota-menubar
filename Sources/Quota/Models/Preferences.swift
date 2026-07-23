@@ -12,8 +12,10 @@ final class Preferences: ObservableObject {
     @AppStorage("showPercent") var showPercent: Bool = true
     /// Which limit drives the menu-bar icon: 5-hour window vs weekly all-models.
     @AppStorage("menuBarMetric") private var menuBarMetricRaw: String = MenuBarMetric.fiveHour.rawValue
-    /// Polling interval in seconds. Minimum 180 enforced by the poller.
-    @AppStorage("pollIntervalSeconds") var pollIntervalSeconds: Int = 300
+    /// Polling interval in seconds. 180 (the endpoint's safe floor) is the
+    /// default — usage %s change slowly, so this is the freshest safe cadence.
+    /// The option exists mainly as a 429 escape valve / battery saver.
+    @AppStorage("pollIntervalSeconds") var pollIntervalSeconds: Int = 180
     @AppStorage("notifyThresholds") var notifyThresholds: Bool = true
     @AppStorage("pulseWhenCritical") var pulseWhenCritical: Bool = true
 
